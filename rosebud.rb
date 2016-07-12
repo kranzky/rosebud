@@ -20,15 +20,15 @@ class Rosebud
   end
 
   def process(url)
-#   contents = _extract(url)
+#   contents = _retrieve(url)
 #   File.open("results.json", "w") { |file| file.write(contents.to_json) }
     contents = JSON.parse(File.read("results.json"))
-    _convert(contents)
+    _extract(contents)
   end
 
   private
 
-  def _extract(url)
+  def _retrieve(url)
     visit url
     _wait_for_page_load
     {
@@ -40,34 +40,18 @@ class Rosebud
     }
   end
 
-  def _convert(data)
+  def _extract(data)
     doc = Nokogiri::HTML(data["html"])
-    meta = []
-    doc.css("meta").select do |data|
-      values = data.attributes.values
-      meta << Hash[values.map { |a| [a.name, a.value] }]
-    end
-    link = []
-    doc.css("link").select do |data|
-      values = data.attributes.values
-      link << Hash[values.map { |a| [a.name, a.value] }]
-    end
-    title = "Homeopathy: the air guitar of medicine"
-    body = doc.css("body").first.search("[text()*='#{title}']").first.parent
-    text = body.text
-    language = CLD.detect_language(text)[:code]
-    # TODO: use the open graph protocol for title, type, url, image etc
-    # TODO: there's also the twitter card and oembed data (via URL)
-    # TODO: use the "original-source" or "canonical" or "shortlink" link rel
-    url = data["url"]
-    # TODO: use the "news_keywords" meta
-    extractor = Phrasie::Extractor.new
-    keywords = extractor.phrases(text).map(&:first).map(&:downcase)
-    keywords.reject! { |k| k !~ /\A[\p{Alnum}]+\Z/ }
-    keywords = keywords[0...10].sort.uniq
+    head = _extract_head(doc)
+    url = _extract_url(data["url"], head),
+    title = _extract_title(data["title"], head, doc)
+    body = _extract_body(title, doc)
+    text = _extract_text(body)
+    language = _extract_language(head, text)
+    keywords = _extract_keywords(head, text)
     {
       url: url,
-      title: "",
+      title: title,
       summary: "",
       provider: {
         name: "",
@@ -88,6 +72,51 @@ class Rosebud
       html: "",
       text: ""
     }
+  end
+
+  def _extract_head(doc)
+    retval = { meta: [], link: [] }
+    doc.css("meta").select do |data|
+      values = data.attributes.values
+      retval[:meta] << Hash[values.map { |a| [a.name.to_sym, a.value] }]
+    end
+    link = []
+    doc.css("link").select do |data|
+      values = data.attributes.values
+      retval[:link] << Hash[values.map { |a| [a.name.to_sym, a.value] }]
+    end
+    retval
+  end
+
+  def _extract_url(fallback, head)
+    fallback
+  end
+
+  def _extract_title(fallback, head, doc)
+    "Homeopathy: the air guitar of medicine"
+  end
+
+  def _extract_body(title, doc)
+    doc.css("body").first.search("[text()*='#{title}']").first.parent
+  end
+
+  def _extract_text(body)
+    body.text
+  end
+
+  def _extract_language(head, text)
+    CLD.detect_language(text)[:code]
+  end
+
+  def _extract_keywords(head, text)
+    extractor = Phrasie::Extractor.new
+    auto =
+      extractor
+        .phrases(text)
+        .map(&:first)
+        .map(&:downcase)
+        .reject { |k| k !~ /\A[\p{Alnum}]+\Z/ }
+    keywords = auto[0...10].sort.uniq
   end
 
   def _wait_for_page_load
