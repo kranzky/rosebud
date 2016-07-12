@@ -14,15 +14,25 @@ class Rosebud
   include Capybara::DSL
 
   def initialize
+    options = { js_errors: false }
+    Capybara.register_driver :poltergeist do |app|
+      Capybara::Poltergeist::Driver.new(app, options)
+    end
     Capybara.default_driver = :poltergeist
     Capybara.current_session.driver.add_headers('User-Agent' => _iPhone[:user_agent])
     Capybara.current_session.driver.resize_window(*_iPhone[:dimensions])
   end
 
+  def exercise
+    Dir["*.json"].each do |name|
+      contents = JSON.parse(File.read(name))
+      _extract(contents)
+    end
+  end
+
   def process(url)
-#   contents = _retrieve(url)
-#   File.open("results.json", "w") { |file| file.write(contents.to_json) }
-    contents = JSON.parse(File.read("results.json"))
+    contents = _retrieve(url)
+    File.open(name, "w") { |file| file.write(contents.to_json) }
     _extract(contents)
   end
 
@@ -30,7 +40,6 @@ class Rosebud
 
   def _retrieve(url)
     visit url
-    _wait_for_page_load
     {
       url: page.current_url,
       title: page.title,
@@ -43,6 +52,7 @@ class Rosebud
   def _extract(data)
     doc = Nokogiri::HTML(data["html"])
     head = _extract_head(doc)
+    debugger
     url = _extract_url(data["url"], head),
     title = _extract_title(data["title"], head, doc)
     body = _extract_body(title, doc)
@@ -88,9 +98,9 @@ class Rosebud
       retval[:link] << Hash[values.map { |a| [a.name.to_sym, a.value] }]
     end
     retval[:oembed] = _extract_oembed(retval[:link])
-    retval[:ograph] = _extract_meta(retval[:meta], :property, /\Aog:/)
-    retval[:article] = _extract_meta(retval[:meta], :property, /\Aarticle:/)
-    retval[:twitter] = _extract_meta(retval[:meta], :name, /\Atwitter:/)
+    retval[:ograph] = _extract_meta(retval[:meta], /\Aog:/)
+    retval[:article] = _extract_meta(retval[:meta], /\Aarticle:/)
+    retval[:twitter] = _extract_meta(retval[:meta], /\Atwitter:/)
     # do music, video, book, profile
     retval
   end
@@ -104,11 +114,11 @@ class Rosebud
     end]
   end
 
-  def _extract_meta(meta, key, pattern)
-    tags = meta.select { |tag| tag[key] =~ pattern }
+  def _extract_meta(meta, pattern)
+    tags = meta.select { |tag| tag[:name] =~ pattern || tag[:property] =~ pattern }
     meta.reject! { |tag| tags.include?(tag) }
     Hash[tags.map do |tag|
-      name = tag[key].gsub(pattern, '')
+      name = (tag[:name] || tag[:property]).gsub(pattern, '')
       name.gsub!(':', '_')
       [name.to_sym, tag[:content]]
     end]
@@ -123,7 +133,8 @@ class Rosebud
   end
 
   def _extract_body(title, doc)
-    doc.css("body").first.search("[text()*='#{title}']").first.parent
+    #doc.css("body").first.search("[text()*='#{title}']").first.parent
+    doc
   end
 
   # use description meta tag
@@ -152,12 +163,6 @@ class Rosebud
     keywords = auto[0...10].sort.uniq
   end
 
-  def _wait_for_page_load
-    Timeout.timeout(Capybara.default_max_wait_time) do
-      loop until page.evaluate_script('jQuery.active').zero?
-    end
-  end
-
   def _iPhone
     {
       dimensions: [736, 414],
@@ -166,4 +171,4 @@ class Rosebud
   end
 end
 
-ap Rosebud.new.process(ARGV.first)
+Rosebud.new.exercise

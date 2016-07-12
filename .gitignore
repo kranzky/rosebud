@@ -8,3 +8,4 @@
 /slack/*
 *.swp
 capybara*png
+*.json
