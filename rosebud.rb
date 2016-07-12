@@ -52,8 +52,7 @@ class Rosebud
   def _extract(data)
     doc = Nokogiri::HTML(data["html"])
     head = _extract_head(doc)
-    debugger
-    url = _extract_url(data["url"], head),
+    url = _extract_url(data["url"], head)
     title = _extract_title(data["title"], head, doc)
     body = _extract_body(title, doc)
     summary = _extract_summary(head, body)
@@ -102,12 +101,16 @@ class Rosebud
     retval[:article] = _extract_meta(retval[:meta], /\Aarticle:/)
     retval[:twitter] = _extract_meta(retval[:meta], /\Atwitter:/)
     # do music, video, book, profile
+    links = retval[:link].select { |link| link[:type].nil? && !link[:rel].nil? }
+    retval[:link] = Hash[links.map { |link| [link[:rel].gsub(/[-: ]/, '_').to_sym, link[:href]] }]
+    meta = retval[:meta].select { |meta| !(meta[:name] || meta[:property]).nil? }
+    retval[:meta] = Hash[meta.map { |meta| [(meta[:name] || meta[:property]).gsub(/[-: ]/, '_').to_sym, meta[:content]] }]
     retval
   end
 
   def _extract_oembed(links)
     link = links.find { |link| link[:type] == 'application/json+oembed' }
-    return if link.nil?
+    return {} if link.nil?
     url = link[:href]
     Hash[JSON.parse(Net::HTTP.get(URI(url))).map do |k, v|
       [k.to_sym, v]
@@ -124,12 +127,29 @@ class Rosebud
     end]
   end
 
+  # we could use twitter or ograph here...
   def _extract_url(fallback, head)
-    fallback
+    head[:link][:canonical] || fallback
   end
 
+  # build a list of candidate titles
+  # look at page elements that might contain the title
+  # ultimately find the correct title string
   def _extract_title(fallback, head, doc)
-    "Homeopathy: the air guitar of medicine"
+    candidates = [fallback]
+    header = doc.css('h1').map(&:text)
+    header = doc.css('h2').map(&:text) if header.first.nil?
+    header = doc.css('h3').map(&:text) if header.first.nil?
+    header = doc.css('h4').map(&:text) if header.first.nil?
+    header = doc.css('h5').map(&:text) if header.first.nil?
+    header = doc.css('h6').map(&:text) if header.first.nil?
+    candidates << head[:twitter][:title]
+    candidates << head[:ograph][:title]
+    candidates |= header
+    candidates.compact!
+    candidates.map!(&:strip)
+    ap candidates
+    fallback
   end
 
   def _extract_body(title, doc)
