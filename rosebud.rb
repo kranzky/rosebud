@@ -7,6 +7,9 @@ require 'capybara'
 require 'capybara/dsl'
 require 'capybara/poltergeist'
 
+require 'phrasie'
+require 'cld'
+
 class Rosebud
   include Capybara::DSL
 
@@ -16,7 +19,41 @@ class Rosebud
     Capybara.current_session.driver.resize_window(*_iPhone[:dimensions])
   end
 
-  def scrape(url)
+  def process(url)
+#   contents = extract(url)
+#   File.open("results.json", "w") { |file| file.write(contents.to_json) }
+    contents = JSON.parse(File.read("results.json"))
+    convert(contents)
+  end
+
+  def convert(data)
+    text = data["html"]
+    language = CLD.detect_language(text)[:code]
+    # TODO: use the open graph protocol for title, type, url, image etc
+    # TODO: there's also the twitter card and oembed data (via URL)
+    # TODO: use the "original-source" or "canonical" or "shortlink" link rel
+    url = data["url"]
+    # TODO: use the "news_keywords" meta
+    keywords = Phrasie::Extractor.new.phrases(text)[0...10].map(&:first)
+    {
+      url: url,
+      title: "",
+      summary: "",
+      provider: {},
+      authors: [],
+      language: language,
+      keywords: keywords,
+      images: [],
+      icon: "",
+      banner: "",
+      screenshot: "",
+      published: "",
+      html: "",
+      text: ""
+    }
+  end
+
+  def extract(url)
     visit url
     _wait_for_page_load
     {
@@ -44,7 +81,4 @@ class Rosebud
   end
 end
 
-results = Rosebud.new.scrape(ARGV.first)
-debugger
-
-ap results
+ap Rosebud.new.process(ARGV.first)
