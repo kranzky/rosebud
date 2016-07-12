@@ -52,7 +52,8 @@ class Rosebud
       values = data.attributes.values
       link << Hash[values.map { |a| [a.name, a.value] }]
     end
-    body = doc.css("body").first
+    title = "Homeopathy: the air guitar of medicine"
+    body = doc.css("body").first.search("[text()*='#{title}']").first.parent
     text = body.text
     language = CLD.detect_language(text)[:code]
     # TODO: use the open graph protocol for title, type, url, image etc
@@ -60,7 +61,10 @@ class Rosebud
     # TODO: use the "original-source" or "canonical" or "shortlink" link rel
     url = data["url"]
     # TODO: use the "news_keywords" meta
-    keywords = Phrasie::Extractor.new.phrases(text)[0...10].map(&:first)
+    extractor = Phrasie::Extractor.new
+    keywords = extractor.phrases(text).map(&:first).map(&:downcase)
+    keywords.reject! { |k| k !~ /\A[\p{Alnum}]+\Z/ }
+    keywords = keywords[0...10].sort.uniq
     {
       url: url,
       title: "",
