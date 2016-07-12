@@ -46,13 +46,14 @@ class Rosebud
     url = _extract_url(data["url"], head),
     title = _extract_title(data["title"], head, doc)
     body = _extract_body(title, doc)
+    summary = _extract_summary(head, body)
     text = _extract_text(body)
     language = _extract_language(head, text)
     keywords = _extract_keywords(head, text)
     {
       url: url,
       title: title,
-      summary: "",
+      summary: summary,
       provider: {
         name: "",
         url: "",
@@ -76,16 +77,41 @@ class Rosebud
 
   def _extract_head(doc)
     retval = { meta: [], link: [] }
-    doc.css("meta").select do |data|
+    doc.css("meta").each do |data|
       values = data.attributes.values
       retval[:meta] << Hash[values.map { |a| [a.name.to_sym, a.value] }]
     end
     link = []
-    doc.css("link").select do |data|
+    doc.css("link").each do |data|
+      next if data['rel'] == 'stylesheet'
       values = data.attributes.values
       retval[:link] << Hash[values.map { |a| [a.name.to_sym, a.value] }]
     end
+    retval[:oembed] = _extract_oembed(retval[:link])
+    retval[:ograph] = _extract_meta(retval[:meta], :property, /\Aog:/)
+    retval[:article] = _extract_meta(retval[:meta], :property, /\Aarticle:/)
+    retval[:twitter] = _extract_meta(retval[:meta], :name, /\Atwitter:/)
+    # do music, video, book, profile
     retval
+  end
+
+  def _extract_oembed(links)
+    link = links.find { |link| link[:type] == 'application/json+oembed' }
+    return if link.nil?
+    url = link[:href]
+    Hash[JSON.parse(Net::HTTP.get(URI(url))).map do |k, v|
+      [k.to_sym, v]
+    end]
+  end
+
+  def _extract_meta(meta, key, pattern)
+    tags = meta.select { |tag| tag[key] =~ pattern }
+    meta.reject! { |tag| tags.include?(tag) }
+    Hash[tags.map do |tag|
+      name = tag[key].gsub(pattern, '')
+      name.gsub!(':', '_')
+      [name.to_sym, tag[:content]]
+    end]
   end
 
   def _extract_url(fallback, head)
@@ -100,14 +126,21 @@ class Rosebud
     doc.css("body").first.search("[text()*='#{title}']").first.parent
   end
 
+  # use description meta tag
+  def _extract_summary(head, doc)
+    "whatever"
+  end
+
   def _extract_text(body)
     body.text
   end
 
+  # use language meta tag
   def _extract_language(head, text)
     CLD.detect_language(text)[:code]
   end
 
+  # use keywords meta tag
   def _extract_keywords(head, text)
     extractor = Phrasie::Extractor.new
     auto =
