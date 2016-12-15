@@ -32,6 +32,7 @@ class Rosebud
 
   def process(url)
     contents = _retrieve(url)
+    name = File.basename(url, ".*").downcase.gsub(/[ :_]/, '-') + ".json"
     File.open(name, "w") { |file| file.write(contents.to_json) }
     _extract(contents)
   end
@@ -59,6 +60,11 @@ class Rosebud
     text = _extract_text(body)
     language = _extract_language(head, text)
     keywords = _extract_keywords(head, text)
+    #images
+    #banner
+    #published
+    #provider
+    #authors
     {
       url: url,
       title: title,
@@ -79,8 +85,8 @@ class Rosebud
       images: [],
       banner: "",
       screenshot: data["image"],
-      html: "",
-      text: ""
+      html: "", #body
+      text: "" #text
     }
   end
 
@@ -137,21 +143,31 @@ class Rosebud
   # ultimately find the correct title string
   def _extract_title(fallback, head, doc)
     candidates = [fallback]
-    header = doc.css('h1').map(&:text)
-    header = doc.css('h2').map(&:text) if header.first.nil?
-    header = doc.css('h3').map(&:text) if header.first.nil?
-    header = doc.css('h4').map(&:text) if header.first.nil?
-    header = doc.css('h5').map(&:text) if header.first.nil?
-    header = doc.css('h6').map(&:text) if header.first.nil?
     candidates << head[:twitter][:title]
     candidates << head[:ograph][:title]
-    candidates |= header
     candidates.compact!
     candidates.map!(&:strip)
+
+    header = doc.css('h1').map(&:text)
+    header |= doc.css('h2').map(&:text)
+    header |= doc.css('h3').map(&:text)
+    header |= doc.css('h4').map(&:text)
+    header |= doc.css('h5').map(&:text)
+    header |= doc.css('h6').map(&:text)
+    header.compact!
+    header.map!(&:strip)
+
     ap candidates
+    ap header
+
     fallback
   end
 
+  # find the page element that contains the title
+  # guess that the body must be in the parent, or a sibling of that
+  # guess that the body must contain multiple paragraph elements at some level
+  # guess the body needs a class or an ID of "main", "story", "post", "article", "content" or something like that
+  # return a sanitised version that contains basic html only
   def _extract_body(title, doc)
     #doc.css("body").first.search("[text()*='#{title}']").first.parent
     doc
