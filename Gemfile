@@ -6,7 +6,7 @@ gem 'capybara', '~> 2.7.1'
 gem 'poltergeist', '~> 1.10.0'
 
 # extract
-gem 'nokogiri', '~> 1.6.8'
+gem 'nokogiri', '~> 1.10.4'
 
 # identify
 gem 'cld', '~> 0.7.0'
